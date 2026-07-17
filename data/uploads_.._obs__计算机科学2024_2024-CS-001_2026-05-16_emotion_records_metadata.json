@@ -1,0 +1,17 @@
+{
+  "record_id": 115,
+  "storage_path": "/计算机科学2024/2024-CS-001/2026-05-16/emotion_records.json",
+  "upload": {
+    "upload_id": "upload-24fe50cef22dfabf-1",
+    "etag": "0c869943fb6e193241593a01bd2b901c",
+    "chunks": 1,
+    "completed_at": "2026-05-16T23:35:26.585014"
+  },
+  "payload_info": {
+    "record_count": 1,
+    "student_code": "2024-CS-001",
+    "date": "2026-05-16"
+  },
+  "data_checksum": "ecc00f383eb548a7a13b71ddbe16e53b5cbe78dd007f7c62c5e3f986eb00a412",
+  "metadata_version": "1.0"
+}

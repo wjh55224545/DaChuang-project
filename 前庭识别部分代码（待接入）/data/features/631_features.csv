@@ -1,0 +1,3 @@
+window_id,video_name,timestamp_sec,dominant_freq,amp_mean_x,amp_mean_y,symmetry_ratio,motion_stability,freq_entropy,energy_distribution
+0,631,0.0,1.841667,0.153966,0.266244,0.578289,2.229476,9.591255,0.224398
+1,631,1.2,1.853707,0.202188,0.460671,0.438899,2.806897,9.54615,0.334335

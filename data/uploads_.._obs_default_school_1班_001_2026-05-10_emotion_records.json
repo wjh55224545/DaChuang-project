@@ -1,0 +1,27 @@
+{
+  "schema_version": "2.0",
+  "school": "",
+  "class_name": "1班",
+  "student_code": "001",
+  "student_profile": {
+    "student_id": null,
+    "student_code": "001",
+    "name": "张三",
+    "class_name": "1班",
+    "school": "",
+    "baseline_mood": 0.7
+  },
+  "emotion_records": [
+    {
+      "record_id": 1,
+      "timestamp": "2026-05-10T03:57:04.723234",
+      "data": {
+        "fused_emotion": "平静",
+        "fused_score": 0.7
+      }
+    }
+  ],
+  "record_count": 1,
+  "generated_at": "2026-05-10T03:57:04.723250",
+  "generator": "MindMirror-PsychMonitor-v2.0"
+}

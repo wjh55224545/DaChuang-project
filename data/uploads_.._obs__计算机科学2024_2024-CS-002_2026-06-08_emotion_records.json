@@ -1,0 +1,41 @@
+{
+  "schema_version": "2.0",
+  "school": "",
+  "class_name": "计算机科学2024",
+  "student_code": "2024-CS-002",
+  "student_profile": {
+    "student_id": 2,
+    "student_code": "2024-CS-002",
+    "name": "李四",
+    "class_name": "计算机科学2024",
+    "school": "",
+    "baseline_mood": 0.55
+  },
+  "emotion_records": [
+    {
+      "record_id": 389,
+      "timestamp": "2026-06-08T21:20:06.567231",
+      "data": {
+        "facial_emotion": "愤怒",
+        "facial_conf": 0.838,
+        "facial_valence": -0.016,
+        "facial_arousal": 0.443,
+        "vestibular_valence": -0.052,
+        "vestibular_arousal": 0.206,
+        "vestibular_confidence": 0.756,
+        "vestibular_intensity": 0.685,
+        "fused_emotion": "愤怒",
+        "fused_score": 0.835,
+        "fused_valence": -0.031,
+        "fused_arousal": 0.348,
+        "confidence_diff": 0.115,
+        "requires_review": false,
+        "estimated_accuracy": 0.92,
+        "processing_time_ms": 107
+      }
+    }
+  ],
+  "record_count": 1,
+  "generated_at": "2026-06-08T21:20:06.567246",
+  "generator": "MindMirror-PsychMonitor-v2.0"
+}

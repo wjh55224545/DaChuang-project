@@ -1,0 +1,9 @@
+{
+  "record_id": 5,
+  "data": {
+    "student_id": 2,
+    "fused_emotion": "中性",
+    "fused_score": 0.39
+  },
+  "stored_at": "2026-05-09T09:53:10.369445"
+}

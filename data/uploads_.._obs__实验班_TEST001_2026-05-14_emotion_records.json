@@ -1,0 +1,41 @@
+{
+  "schema_version": "2.0",
+  "school": "",
+  "class_name": "实验班",
+  "student_code": "TEST001",
+  "student_profile": {
+    "student_id": 1,
+    "student_code": "TEST001",
+    "name": "测试学生A",
+    "class_name": "实验班",
+    "school": "",
+    "baseline_mood": 0.72
+  },
+  "emotion_records": [
+    {
+      "record_id": 3,
+      "timestamp": "2026-05-14T10:54:42.321215",
+      "data": {
+        "facial_emotion": "开心",
+        "facial_conf": 0.862,
+        "facial_valence": 0.708,
+        "facial_arousal": 0.695,
+        "vestibular_valence": 0.698,
+        "vestibular_arousal": 0.32,
+        "vestibular_confidence": 0.666,
+        "vestibular_intensity": 0.732,
+        "fused_emotion": "开心",
+        "fused_score": 0.935,
+        "fused_valence": 0.704,
+        "fused_arousal": 0.545,
+        "confidence_diff": 0.196,
+        "requires_review": false,
+        "estimated_accuracy": 0.92,
+        "processing_time_ms": 102
+      }
+    }
+  ],
+  "record_count": 1,
+  "generated_at": "2026-05-14T10:54:42.321215",
+  "generator": "MindMirror-PsychMonitor-v2.0"
+}
