@@ -18,6 +18,11 @@ dist/
 # IDE
 .vscode/
 
+# 运行时数据（数据库 + OBS模拟文件）
+data/psych.db
+data/*.db
+data/uploads_.._obs__*
+
 # 系统文件
 .DS_Store
 Thumbs.db
