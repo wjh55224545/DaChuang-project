@@ -9,6 +9,7 @@ class AlertOut(BaseModel):
     alert_reason: str
     feedback_channel: str
     feedback_content: str
+    sent_channels: str = ""
     is_acknowledged: int
     triggered_at: str
     acknowledged_at: str | None = None
