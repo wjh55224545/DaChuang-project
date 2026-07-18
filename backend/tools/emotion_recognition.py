@@ -184,7 +184,7 @@ class EmotionRecognitionTool(BaseTool):
         weights = [0.25, 0.20, 0.12, 0.13, 0.08, 0.10, 0.12]
 
         emotion_idx = random.choices(range(len(base_emotions)), weights=weights)[0]
-        emotion = base_emotions[emotions_idx] if (emotions_idx := emotion_idx) < len(base_emotions) else "中性"
+        emotion = base_emotions[emotion_idx] if emotion_idx < len(base_emotions) else "中性"
         confidence = random.uniform(0.70, 0.96)
 
         # 获取情绪的效价和唤醒度

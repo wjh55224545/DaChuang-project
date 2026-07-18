@@ -10,7 +10,7 @@ class AlertService:
         self.db = db
         self.feedback_tool = MultiChannelFeedbackTool()
 
-    def triage_and_alert(self, analysis_results: dict[int, dict], student_map: dict[int, str]) -> list[dict]:
+    def triage_and_alert(self, analysis_results: dict, student_map: dict) -> list[dict]:
         alerts = []
         for sid, result in analysis_results.items():
             if "error" in result:
@@ -24,7 +24,10 @@ class AlertService:
 
             alert = Alert(
                 student_id=sid, severity=severity, alert_reason=reason,
+                risk_level=severity,
+                overall_score=1.0 - score if score else 0.5,
                 feedback_channel=channels, feedback_content=content,
+                sent_channels=channels,
                 triggered_at=datetime.now().isoformat(),
             )
             self.db.add(alert)
