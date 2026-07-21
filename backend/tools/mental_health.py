@@ -3,23 +3,35 @@
 ===============================================
 
 功能说明：
-- 基于LSTM-Transformer混合模型，定期从OBS拉取个体7天情绪时序数据
-- 计算情绪波动熵值、负面情绪累积度、社交互动频次等12项心理健康指标
-- 输出风险等级(绿色/黄色/红色)及具体建议
+- 定期从OBS拉取个体7天情绪时序数据
+- 采用两层混合架构计算12项心理健康指标：
+  Layer 1 — 纯数学计算（5项）：
+    · Shannon熵值、线性回归趋势斜率、情绪恢复速度
+    · 积极情绪占比、情绪突变检测
+  Layer 2 — 智谱AI GLM-4-Flash 推理（7项）：
+    · 情绪稳定性指数、负面情绪累积度、社交互动频次
+    · 唤醒度异常指数、睡眠质量预测、压力累积指数
+    · 综合心理健康评分
+  LLM不可用时自动回退 rule-engine（原LSTM-Transformer模拟 + 规则引擎）
+- 输出风险等级(绿色/黄色/红色)及具体建议，附带LLM推理链
 
 12项心理健康指标：
-1. 情绪稳定性指数 (Emotional Stability Index)
-2. 情绪波动熵值 (Emotion Fluctuation Entropy)
-3. 负面情绪累积度 (Negative Emotion Accumulation)
-4. 社交互动频次 (Social Interaction Frequency)
-5. 日间情绪趋势 (Daily Emotion Trend)
-6. 唤醒度异常指数 (Arousal Abnormality Index)
-7. 情绪恢复速度 (Emotion Recovery Speed)
-8. 睡眠质量预测 (Sleep Quality Prediction)
-9. 压力累积指数 (Stress Accumulation Index)
-10. 积极情绪占比 (Positive Emotion Ratio)
-11. 情绪突变检测 (Emotion Abrupt Change Detection)
-12. 综合心理健康评分 (Overall Mental Health Score)
+① 情绪稳定性指数 (Emotional Stability Index)        — Layer 2 (LLM)
+② 情绪波动熵值 (Emotion Fluctuation Entropy)         — Layer 1 (纯数学)
+③ 负面情绪累积度 (Negative Emotion Accumulation)     — Layer 2 (LLM)
+④ 社交互动频次 (Social Interaction Frequency)        — Layer 2 (LLM)
+⑤ 日间情绪趋势 (Daily Emotion Trend)                — Layer 1 (纯数学)
+⑥ 唤醒度异常指数 (Arousal Abnormality Index)         — Layer 2 (LLM)
+⑦ 情绪恢复速度 (Emotion Recovery Speed)             — Layer 1 (纯数学)
+⑧ 睡眠质量预测 (Sleep Quality Prediction)            — Layer 2 (LLM)
+⑨ 压力累积指数 (Stress Accumulation Index)           — Layer 2 (LLM)
+⑩ 积极情绪占比 (Positive Emotion Ratio)              — Layer 1 (纯数学)
+⑪ 情绪突变检测 (Emotion Abrupt Change Detection)     — Layer 1 (纯数学)
+⑫ 综合心理健康评分 (Overall Mental Health Score)     — Layer 2 (LLM)
+
+新增方法：
+- _calculate_recovery_details(): 计算恢复速度、恢复次数、平均恢复间隔
+- _llm_deep_analysis(): 调用智谱AI进行深度分析（推理7项指标 + 风险评估 + 建议）
 
 风险等级判定：
 - 绿色 (Green): 综合评分 >= 0.7, 无红色预警指标
@@ -83,26 +95,91 @@ class MentalHealthAnalysisTool(BaseTool):
             # 步骤2: 提取情绪时间序列
             emotion_series = self._extract_emotion_series(all_records)
 
-            # 步骤3: 计算12项心理健康指标
+            # 步骤3: 计算12项心理健康指标（含真实公式 + 规则引擎兜底值）
             indicators = self._calculate_indicators(
                 emotion_series, baseline, all_records
             )
 
-            # 步骤4: LSTM-Transformer深度分析
-            lstm_transformer_result = self._lstm_transformer_analysis(
-                emotion_series, indicators
-            )
+            # 步骤4: 尝试智谱AI GLM-4 深度分析（推理7项指标 + 风险评估 + 建议）
+            try:
+                llm_result = self._llm_deep_analysis(
+                    student_id=student_id,
+                    baseline=baseline,
+                    indicators=indicators,
+                    emotion_series=emotion_series,
+                    analysis_window_days=analysis_window_days,
+                )
+                ai_success = True
+            except Exception:
+                ai_success = False
+                llm_result = None
 
-            # 步骤5: 风险等级判定
-            risk_level, risk_reason = self._determine_risk_level(indicators, lstm_transformer_result)
+            if ai_success and llm_result:
+                # -- LLM推理成功：用LLM值覆盖7项拍脑袋指标 --
+                llm_indicators = llm_result.get("indicators", {})
+                indicators["emotional_stability_index"] = round(
+                    float(llm_indicators.get("emotional_stability_index", indicators["emotional_stability_index"])), 3)
+                indicators["negative_emotion_accumulation"] = round(
+                    float(llm_indicators.get("negative_emotion_accumulation", indicators["negative_emotion_accumulation"])), 3)
+                indicators["social_interaction_frequency"] = round(
+                    float(llm_indicators.get("social_interaction_frequency", indicators["social_interaction_frequency"])), 3)
+                indicators["arousal_abnormality_index"] = round(
+                    float(llm_indicators.get("arousal_abnormality_index", indicators["arousal_abnormality_index"])), 3)
+                indicators["sleep_quality_prediction"] = round(
+                    float(llm_indicators.get("sleep_quality_prediction", indicators["sleep_quality_prediction"])), 2)
+                indicators["stress_accumulation_index"] = round(
+                    float(llm_indicators.get("stress_accumulation_index", indicators["stress_accumulation_index"])), 3)
+                indicators["overall_mental_health_score"] = round(
+                    float(llm_indicators.get("overall_mental_health_score", indicators["overall_mental_health_score"])), 3)
 
-            # 步骤6: 生成具体建议
-            suggestions = self._generate_suggestions(
-                risk_level, indicators, lstm_transformer_result
-            )
+                # 风险评估
+                risk_assessment = llm_result.get("risk_assessment", {})
+                risk_level = risk_assessment.get("level", "green")
+                risk_reason = risk_assessment.get("reason", "")
+                reasoning_chain = risk_assessment.get("reasoning_chain", [])
 
-            # 步骤7: 计算综合评分
-            overall_score = self._calculate_overall_score(indicators, lstm_transformer_result)
+                # 建议
+                suggestions = llm_result.get("suggestions", [])
+
+                # 风险/保护因素
+                risk_factors = llm_result.get("risk_factors", [])
+                protective_factors = llm_result.get("protective_factors", [])
+
+                # 模式识别 & 预测
+                detected_patterns = llm_result.get("detected_patterns", [])
+                forecast = llm_result.get("forecast", {})
+
+                # LLM 分析结果（替代原 LSTM-Transformer 模拟）
+                lstm_transformer_result = {
+                    "source": "zhipu_glm4_flash",
+                    "detected_patterns": detected_patterns,
+                    "forecast": forecast,
+                    "reasoning_chain": reasoning_chain,
+                    "confidence": round(0.85, 2),
+                }
+                overall_score = indicators["overall_mental_health_score"]
+                model_version = "ZhipuGLM-4-Flash-v1.0"
+                confidence = 0.85
+            else:
+                # -- LLM不可用时回退原有规则引擎 --
+                lstm_transformer_result = self._lstm_transformer_analysis(
+                    emotion_series, indicators
+                )
+                risk_level, risk_reason = self._determine_risk_level(
+                    indicators, lstm_transformer_result
+                )
+                suggestions = self._generate_suggestions(
+                    risk_level, indicators, lstm_transformer_result
+                )
+                overall_score = self._calculate_overall_score(
+                    indicators, lstm_transformer_result
+                )
+                risk_factors = self._identify_risk_factors(
+                    indicators, lstm_transformer_result
+                )
+                protective_factors = self._identify_protective_factors(indicators)
+                model_version = "RuleEngine-Fallback-v2.1"
+                confidence = round(0.85 + random.uniform(0, 0.1), 2)
 
             return ToolResult(
                 success=True,
@@ -115,7 +192,7 @@ class MentalHealthAnalysisTool(BaseTool):
                     "baseline": baseline,
                     "baseline_deviation": round(abs(indicators["avg_emotion"] - baseline), 3),
 
-                    # 12项心理健康指标
+                    # 12项心理健康指标（已完成LLM覆盖或规则引擎兜底）
                     "indicators": indicators,
                     "lstm_transformer_analysis": lstm_transformer_result,
 
@@ -132,15 +209,15 @@ class MentalHealthAnalysisTool(BaseTool):
                     "negative_emotion_ratio": round(indicators["negative_emotion_ratio"], 3),
                     "positive_emotion_ratio": round(indicators["positive_emotion_ratio"], 3),
 
-                    # 风险因素
-                    "risk_factors": self._identify_risk_factors(indicators, lstm_transformer_result),
-                    "protective_factors": self._identify_protective_factors(indicators),
+                    # 风险/保护因素
+                    "risk_factors": risk_factors,
+                    "protective_factors": protective_factors,
 
                     # 元数据
                     "records_analyzed": len(all_records),
                     "analysis_window_days": analysis_window_days,
-                    "model_version": "LSTM-Transformer-v2.1",
-                    "confidence": round(0.85 + random.uniform(0, 0.1), 2),
+                    "model_version": model_version,
+                    "confidence": round(confidence, 2),
                     "analyzed_at": datetime.now().isoformat(),
                 },
             )
@@ -326,18 +403,99 @@ class MentalHealthAnalysisTool(BaseTool):
         if len(emotion_series) < 3:
             return 0.5
 
-        # 统计从负面到正面的转换次数
         transitions = 0
         for i in range(1, len(emotion_series)):
             prev = emotion_series[i - 1]["emotion"]
             curr = emotion_series[i]["emotion"]
-
             if prev in NEGATIVE_EMOTIONS and curr in POSITIVE_EMOTIONS:
                 transitions += 1
 
-        # 恢复速度 = 转换次数 / 可能的最大转换次数
         max_transitions = len(emotion_series) - 1
         return transitions / max_transitions if max_transitions > 0 else 0.5
+
+    def _calculate_recovery_details(self, emotion_series: list) -> tuple[float, int, str]:
+        """
+        计算情绪恢复详细数据。
+        Returns:
+            (recovery_speed, recovery_count, avg_recovery_interval)
+        """
+        if len(emotion_series) < 3:
+            return 0.5, 0, ">24h"
+
+        transitions = 0
+        intervals = []
+        last_negative_idx = None
+
+        for i in range(1, len(emotion_series)):
+            prev = emotion_series[i - 1]["emotion"]
+            curr = emotion_series[i]["emotion"]
+            if prev in NEGATIVE_EMOTIONS:
+                last_negative_idx = i - 1
+            if last_negative_idx is not None and curr in POSITIVE_EMOTIONS:
+                transitions += 1
+                intervals.append(i - last_negative_idx)
+                last_negative_idx = None
+
+        recovery_speed = self._calculate_recovery_speed(emotion_series)
+        avg_interval = sum(intervals) / len(intervals) if intervals else 0
+
+        # 格式化平均恢复间隔（假设每条记录间隔约3小时）
+        if avg_interval == 0:
+            interval_str = ">24h"
+        elif avg_interval <= 1:
+            interval_str = f"{avg_interval * 3:.1f}h"
+        else:
+            interval_str = f"{avg_interval * 3:.1f}h"
+
+        return recovery_speed, transitions, interval_str
+
+    def _llm_deep_analysis(
+        self,
+        student_id: int,
+        baseline: float,
+        indicators: dict,
+        emotion_series: list,
+        analysis_window_days: int,
+    ) -> dict:
+        """
+        调用智谱AI GLM-4进行深度心理分析。
+        推理7项需专业判断的指标、风险等级、建议、模式识别等。
+
+        Returns:
+            LLM返回的完整分析结果 dict
+        Raises:
+            Exception: API调用或解析失败，由调用方降级处理
+        """
+        from backend.llm.zhipu import generate_mental_health_analysis
+
+        # 从 emotion_series 提取 valence / arousal 序列
+        valence_series = [s.get("valence", 0) for s in emotion_series]
+        arousal_series = [s.get("arousal", 0) for s in emotion_series]
+
+        # 计算恢复详情
+        _, recovery_count, avg_recovery_interval = self._calculate_recovery_details(emotion_series)
+
+        result = generate_mental_health_analysis(
+            student_id=student_id,
+            baseline=baseline,
+            avg_emotion=indicators.get("avg_emotion", baseline),
+            variance=indicators.get("variance", 0.01),
+            entropy=indicators.get("emotion_fluctuation_entropy", 0.5),
+            trend_slope=indicators.get("trend_slope", 0.0),
+            trend=indicators.get("trend", "稳定"),
+            abrupt_count=indicators.get("emotion_abrupt_change_count", 0),
+            recovery_speed=indicators.get("emotion_recovery_speed", 0.5),
+            recovery_count=recovery_count,
+            avg_recovery_interval=avg_recovery_interval,
+            positive_ratio=indicators.get("positive_emotion_ratio", 0.5),
+            negative_ratio=indicators.get("negative_emotion_ratio", 0.2),
+            emotion_distribution=indicators.get("emotion_distribution", {}),
+            valence_series=valence_series,
+            arousal_series=arousal_series,
+            record_count=len(emotion_series),
+            analysis_window_days=analysis_window_days,
+        )
+        return result
 
     def _detect_abrupt_changes(self, scores: list) -> int:
         """检测情绪突变次数（分数变化超过30%为突变）"""
