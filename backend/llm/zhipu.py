@@ -1,8 +1,19 @@
 """
 智谱AI (GLM) 客户端
 ===================
-用于反馈模块的智能通知内容生成。
-通过智谱AI API调用GLM-4模型，根据学生心理分析结果生成个性化的多渠道通知文本。
+封装智谱AI API（兼容OpenAI接口）的调用逻辑，为心镜智能体提供以下能力：
+
+1. generate_feedback_content()
+   反馈模块：根据学生心理分析结果，生成个性化的多渠道智能通知文本。
+
+2. generate_mental_health_analysis()  [新增]
+   时序分析模块：基于数学事实数据（熵、趋势、恢复速度等），
+   由GLM-4-Flash推理7项需专业判断的心理健康指标，并进行风险评估和建议生成。
+
+3. generate_simple_notification()
+   快速通知：生成简短的预警通知消息（非紧急场景）。
+
+统一使用 settings.zhipu_api_key 和 settings.zhipu_base_url 配置。
 
 API文档: https://open.bigmodel.cn/dev/api/normal-model/glm-4
 """
@@ -174,6 +185,196 @@ def generate_feedback_content(
 
     except Exception as e:
         raise RuntimeError(f"智谱AI通知生成失败: {str(e)}") from e
+
+
+def generate_mental_health_analysis(
+    student_id: int,
+    baseline: float,
+    avg_emotion: float,
+    variance: float,
+    entropy: float,
+    trend_slope: float,
+    trend: str,
+    abrupt_count: int,
+    recovery_speed: float,
+    recovery_count: int,
+    avg_recovery_interval: str,
+    positive_ratio: float,
+    negative_ratio: float,
+    emotion_distribution: dict,
+    valence_series: list,
+    arousal_series: list,
+    record_count: int,
+    analysis_window_days: int = 7,
+    model: Optional[str] = None,
+) -> dict:
+    """
+    调用智谱AI进行时序心理健康深度分析。
+
+    基于数学计算得出的事实数据（熵、趋势、恢复速度等），让AI推理出
+    需要专业判断的指标（稳定性指数、压力累积、综合评分等），并进行
+    风险评估和建议生成。
+
+    Args:
+        student_id: 学生ID
+        baseline: 历史情绪基线
+        avg_emotion: 平均情绪分数
+        variance: 情绪方差
+        entropy: Shannon 熵值
+        trend_slope: 趋势斜率
+        trend: 趋势方向 (改善中/稳定/下降中)
+        abrupt_count: 情绪突变次数
+        recovery_speed: 恢复速度
+        recovery_count: 恢复次数
+        avg_recovery_interval: 平均恢复间隔
+        positive_ratio: 积极情绪占比
+        negative_ratio: 负面情绪占比
+        emotion_distribution: 情绪分布 {标签: 频次}
+        valence_series: Valence 时间序列
+        arousal_series: Arousal 时间序列
+        record_count: 有效记录数
+        analysis_window_days: 分析窗口天数
+        model: 模型名称
+
+    Returns:
+        dict: {
+            "emotional_stability_index": float,     # ① 情绪稳定性指数
+            "negative_emotion_accumulation": float, # ③ 负面情绪累积度
+            "social_interaction_frequency": float,  # ④ 社交互动频次
+            "arousal_abnormality_index": float,     # ⑥ 唤醒度异常指数
+            "sleep_quality_prediction": float,      # ⑧ 睡眠质量预测
+            "stress_accumulation_index": float,     # ⑨ 压力累积指数
+            "overall_mental_health_score": float,   # ⑫ 综合心理健康评分
+            "risk_level": str,                      # green/yellow/red
+            "risk_reason": str,
+            "reasoning_chain": list[str],
+            "suggestions": list[dict],
+            "risk_factors": list[str],
+            "protective_factors": list[str],
+            "detected_patterns": list[dict],
+            "forecast": {"next_period_trend": str, "confidence": float, "key_uncertainty": str},
+        }
+    """
+    settings = get_settings()
+    client = get_zhipu_client()
+
+    # 构建情绪分布文本
+    emotion_text = ", ".join(
+        [f"{k}: {v}次" for k, v in emotion_distribution.items()]
+    ) if emotion_distribution else "无数据"
+
+    # Valence 序列摘要（取最近10个点，避免token过长）
+    if valence_series:
+        valence_summary = ", ".join(f"{v:.2f}" for v in valence_series[-10:])
+    else:
+        valence_summary = "无数据"
+
+    # Arousal 序列摘要
+    if arousal_series:
+        arousal_summary = ", ".join(f"{a:.2f}" for a in arousal_series[-10:])
+    else:
+        arousal_summary = "无数据"
+
+    system_prompt = """你是一名学校心理健康评估专家，服务于"心镜智能体"心理健康监测系统。\n\n你的任务是根据学生情绪监测的客观统计数据，进行专业的心理健康评估。你需要：\n\n1. **计算7项指标**：基于提供的数学事实数据，运用专业知识给出以下指标值：\n   - 情绪稳定性指数（0-1，越高越稳定）\n   - 负面情绪累积度（0-1，越高负面越多）\n   - 社交互动频次（0-1，越高越活跃）\n   - 唤醒度异常指数（0-1，越高越异常）\n   - 睡眠质量预测（0-1，越高越好）\n   - 压力累积指数（0-1，越高压力越大）\n   - 综合心理健康评分（0-1，越高越健康）\n\n2. **风险评估**：\n   - 绿色(>=0.7)：情绪状态良好\n   - 黄色(0.4-0.7)：存在风险因素，需关注\n   - 红色(<0.4)：高风险，需立即干预\n\n3. **生成建议**：基于具体数据给出可操作的个性化干预建议\n\n重要原则：\n- 必须紧扣数据推理，每步引用具体指标\n- 不要编造数据中没有的症状\n- 宁保守勿激进，不确定时倾向低风险\n- 建议要具体可行，不要空泛的"多关心"\n- 如果数据显示正常，就判定为绿色，不强行制造问题"""
+
+    user_prompt = f"""请根据以下学生情绪监测数据，完成心理健康评估。
+
+## 学生信息
+- 学生ID: {student_id}
+- 监测周期: 过去 {analysis_window_days} 天
+- 有效记录数: {record_count}
+- 历史情绪基线: {baseline:.2f}
+
+## 数学计算得出的事实数据（不可争议的客观统计）
+- 平均情绪分数: {avg_emotion:.3f}（满分1.0）
+- 情绪方差: {variance:.4f}
+- Shannon 熵值: {entropy:.3f}（0=完全稳定，1=极度紊乱）
+- 趋势斜率: {trend_slope:.4f}（正=改善，负=恶化）
+- 趋势方向: {trend}
+- 情绪突变次数: {abrupt_count} 次
+- 恢复次数: {recovery_count} 次
+- 平均恢复间隔: {avg_recovery_interval}
+- 恢复速度: {recovery_speed:.3f}
+- 积极情绪占比: {positive_ratio:.3f}
+- 负面情绪占比: {negative_ratio:.3f}
+- 情绪分布: {emotion_text}
+- Valence 序列（最近）: [{valence_summary}]
+- Arousal 序列（最近）: [{arousal_summary}]
+
+## 任务
+
+请基于以上事实数据，运用专业心理学知识进行推理。以严格 JSON 格式返回：
+
+{{
+  "indicators": {{
+    "emotional_stability_index": 0.0-1.0,
+    "negative_emotion_accumulation": 0.0-1.0,
+    "social_interaction_frequency": 0.0-1.0,
+    "arousal_abnormality_index": 0.0-1.0,
+    "sleep_quality_prediction": 0.0-1.0,
+    "stress_accumulation_index": 0.0-1.0,
+    "overall_mental_health_score": 0.0-1.0
+  }},
+  "risk_assessment": {{
+    "level": "green|yellow|red",
+    "reason": "风险判定依据，引用具体数据",
+    "reasoning_chain": [
+      "第1步: 根据【具体指标】，观察到【具体数值】，这意味着...",
+      "第2步: 结合【其他指标】，两者共同指向...",
+      "第3步: 综合判断..."
+    ]
+  }},
+  "suggestions": [
+    {{
+      "priority": "high|medium|low",
+      "category": "干预类别",
+      "content": "具体可操作建议",
+      "target": "班主任|心理老师|家长|学生本人"
+    }}
+  ],
+  "risk_factors": ["风险因素1", "风险因素2"],
+  "protective_factors": ["保护因素1", "保护因素2"],
+  "detected_patterns": [
+    {{
+      "pattern_name": "如'学业压力型波动'",
+      "confidence": 0.0-1.0,
+      "evidence": "数据依据"
+    }}
+  ],
+  "forecast": {{
+    "next_period_trend": "改善|稳定|恶化",
+    "confidence": 0.0-1.0,
+    "key_uncertainty": "最不确定的因素"
+  }}
+}}
+
+只返回JSON，不要包含其他文字。"""
+
+    try:
+        response = client.chat.completions.create(
+            model=model or settings.zhipu_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.3,
+            max_tokens=2048,
+            response_format={"type": "json_object"},
+        )
+
+        content = response.choices[0].message.content
+        if content is None:
+            raise ValueError("智谱AI返回空内容")
+
+        result = json.loads(content)
+        return result
+
+    except json.JSONDecodeError:
+        # JSON解析失败时返回 None，由调用方降级处理
+        raise RuntimeError("智谱AI返回内容无法解析为JSON")
+
+    except Exception as e:
+        raise RuntimeError(f"智谱AI心理健康分析失败: {str(e)}") from e
 
 
 def generate_simple_notification(
